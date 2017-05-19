@@ -1,4 +1,5 @@
 #include "maxcpp6.h"
+#include <string>
 #include <metamorph/metamorph.h>
 
 // inherit from the MSP base class, template-specialized for myself:
@@ -14,7 +15,8 @@ public:
         post("object created");
         
         
-        
+        metamorph.preserve_transients(true);
+        metamorph.preserve_envelope(true);
     }
     
     ~Example() {
@@ -32,22 +34,25 @@ public:
     }
     
     void handleFloat(long inlet, double v) {
-        post("inlet %ld float %f", inlet, v);
-        //        outlet_float(m_outlets[0], v);
-        
+        std::string param = "";
+    
         switch (inlet) {
             case 0:
+                param = "Harmonic Scale: ";
                 metamorph.harmonic_scale(v);
                 break;
             case 1:
+                param = "Residual Scale: ";
                 metamorph.residual_scale(v);
                 break;
             case 2:
+                param = "Transient Scale: ";
                 metamorph.transient_scale(v);
             default:
                 break;
         }
         
+        post("%s %f", param.c_str(), inlet, v);
     }
     
     
@@ -77,10 +82,9 @@ public:
     //	// if not given, the MspCpp will use Example::perform by default
     void dsp(t_object * dsp64, short *count, double samplerate, long maxvectorsize, long flags) {
         // specify a perform method manually:
-        
-        metamorph.hop_size(sys_getblksize());
-        metamorph.frame_size(metamorph.hop_size() * 4);
         metamorph.reset();
+        
+        
         
         REGISTER_PERFORM(Example, perform);
     }
