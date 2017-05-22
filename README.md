@@ -3,9 +3,9 @@ A Max/MSP port of John Glover's MetaMorph library
 
 # Description
 
-Implements a real-time Max/MSP external extending the sinusoid + noise + ransient analysis synthesis model in John Glover's
+Implements a real-time Max/MSP external extending the sinusoid + noise + transient analysis synthesis model in John Glover's
 MetaMorph library, using the maxcpp Max C++ template. Make sure you have the MetaMorph library installed (not an easy task!).
 
 https://github.com/johnglover/metamorph
 
-For best results choose a buffer size (signal vector size in Max), of 512.
+For best results choose a buffer size (signal vector size in Max), of 512. In future will fix this with a RingBuffer that can cope with default and changing vector sizes.
