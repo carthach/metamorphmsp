@@ -8,17 +8,46 @@ using namespace metamorph;
 
 class Metamorph : public MspCpp6<Metamorph> {
 public:
-    FX metamorph;
+    int hops_per_frame;
+    FX* fx;
+    Transposition* transpose;
+    HarmonicDistortion* hdist;
+    
+    double harmonic_scale,
+    residual_scale,
+    transient_scale,
+    preserve_transients,
+    transposition_factor,
+    preserve_envelope,
+    harmonic_distortion,
+    fundamental_frequency;
     
     Metamorph(t_symbol * sym, long ac, t_atom * av) {
-        setupIO(3, 1);
-        post("object created");
+        setupIO(4, 1);
         
-        metamorph.preserve_transients(true);
-        metamorph.preserve_envelope(true);
+        
+        hops_per_frame = 4;
+        
+        fx = new FX();
+        
+        fx->hop_size(sys_getblksize());
+        fx->frame_size(sys_getblksize() * hops_per_frame);
+        
+        transpose = new Transposition();
+        fx->add_transformation(transpose);
+        
+        hdist = new HarmonicDistortion();
+        fx->add_transformation(hdist);
+        
+        preserve_transients = true;
+        preserve_envelope = false;
+        
+        post("object created");
     }
     
     ~Metamorph() {
+        delete fx;
+        delete transpose;
         post("object freed");
         
         
@@ -36,17 +65,17 @@ public:
         std::string param = "";
     
         switch (inlet) {
-            case 0:
-                param = "Harmonic Scale: ";
-                metamorph.harmonic_scale(v);
-                break;
             case 1:
-                param = "Residual Scale: ";
-                metamorph.residual_scale(v);
+                param = "Harmonic Scale: ";
+                harmonic_scale = v;
                 break;
             case 2:
+                param = "Residual Scale: ";
+                residual_scale = v;
+                break;
+            case 3:
                 param = "Transient Scale: ";
-                metamorph.transient_scale(v);
+                transient_scale = v;
             default:
                 break;
         }
@@ -60,17 +89,32 @@ public:
         double* in = ins[0];
         double* out = outs[0];
         
-        metamorph.process_frame(sampleframes, in, sampleframes, out);
+        
+        for(int i=0; i<sampleframes; i++)
+            out[i] = 0.0;
+        
+        fx->harmonic_scale(harmonic_scale);
+        fx->residual_scale(residual_scale);
+        fx->transient_scale(transient_scale);
+        
+        fx->preserve_transients(preserve_transients);
+        
+        transpose->transposition(0.0);
+        fx->preserve_envelope(preserve_envelope);
+        
+        hdist->harmonic_distortion(1.0);
+        hdist->fundamental_frequency(0.0);
+        
+        fx->process_frame(sampleframes, in, sampleframes, out);
     }
     
     //	// optional method: gets called when the dsp chain is modified
     //	// if not given, the MspCpp will use Metamorph::perform by default
     void dsp(t_object * dsp64, short *count, double samplerate, long maxvectorsize, long flags) {
         // specify a perform method manually:
-        metamorph.reset();
-        
-        metamorph.hop_size(maxvectorsize);
-        metamorph.frame_size(maxvectorsize*4);
+        fx->reset();
+        fx->hop_size(sys_getblksize());
+        fx->frame_size(sys_getblksize() * hops_per_frame);
         
         REGISTER_PERFORM(Metamorph, perform);
     }
