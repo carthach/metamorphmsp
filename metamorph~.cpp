@@ -1,168 +1,120 @@
 #include "maxcpp6.h"
+#include <string>
 #include <metamorph/metamorph.h>
 
 // inherit from the MSP base class, template-specialized for myself:
 
 using namespace metamorph;
 
-class RingBuffer {
-public:
-    std::vector<double> buffer;
-    
-    int readIndex;
-    int writeIndex;
-    int fillCount;
-    
-    RingBuffer(int size)
-    {
-        buffer.assign(size, 0.0);
-        readIndex = 0;
-        writeIndex = 0;
-        fillCount = 0;
-    }
-    
-    int write(int noOfSamples, const double* data)
-    {
-        if(fillCount >= buffer.size())
-            return 0;
-        
-        for(int i=0; i<noOfSamples; i++)
-        {
-            buffer[writeIndex] = data[i];
-            
-            if(writeIndex == buffer.size()-1)
-                writeIndex = 0;
-            else
-                writeIndex++;
-        }
-        
-        this->fillCount += noOfSamples;
-        
-        return noOfSamples;
-    }
-    
-    int read(int noOfSamples, double* data)
-    {
-        if(readIndex == writeIndex)
-            return 0;
-        
-        for(int i=0; i<noOfSamples; i++)
-        {
-            data[i] = buffer[readIndex];
-            
-            if(readIndex == buffer.size()-1)
-                readIndex = 0;
-            else
-                readIndex++;
-        }
-        
-        this->fillCount -= noOfSamples;
-        
-        return noOfSamples;
-    }
-};
-
-void call_from_thread() {
-    std::cout << "Hello, World" << std::endl;
-}
-
 class Metamorph : public MspCpp6<Metamorph> {
 public:
-    FX metamorph;
+    int hops_per_frame;
+    FX* fx;
+    Transposition* transpose;
+    HarmonicDistortion* hdist;
     
+    double harmonic_scale,
+    residual_scale,
+    transient_scale,
+    preserve_transients,
+    transposition_factor,
+    preserve_envelope,
+    harmonic_distortion,
+    fundamental_frequency;
     
-    
-    RingBuffer inputRingBuffer, outputRingBuffer;
-    std::vector<double> tempInputBuffer, tempOutputBuffer;
-    
-    int hopSize = 512;
-    int frameSize = hopSize * 4;
-    
-    Metamorph(t_symbol * sym, long ac, t_atom * av) : inputRingBuffer(1024), outputRingBuffer(1024) {
-        setupIO(3, 1);
+    Metamorph(t_symbol * sym, long ac, t_atom * av) {
+        setupIO(4, 1);
         
-        setupBuffers();
         
-        metamorph.harmonic_scale(1.0);
-        metamorph.residual_scale(1.0);
-        metamorph.transient_scale(1.0);
+        hops_per_frame = 4;
+        
+        fx = new FX();
+        
+        fx->hop_size(sys_getblksize());
+        fx->frame_size(sys_getblksize() * hops_per_frame);
+        
+        transpose = new Transposition();
+        fx->add_transformation(transpose);
+        
+        hdist = new HarmonicDistortion();
+        fx->add_transformation(hdist);
+        
+        preserve_transients = true;
+        preserve_envelope = false;
         
         post("object created");
     }
     
     ~Metamorph() {
+        delete fx;
+        delete transpose;
         post("object freed");
-    }
-    
-    void setupBuffers()
-    {
-        metamorph.hop_size(hopSize);
-        metamorph.frame_size(frameSize);
-        metamorph.reset();
         
-        tempInputBuffer.assign(hopSize, 0.0);
-        tempOutputBuffer.assign(hopSize, 0.0);
+        
     }
     
     // methods:
-    void bang(long inlet) {
-        post("bang in inlet %i!", inlet);
-    }
-    void test(long inlet, t_symbol * s, long ac, t_atom * av) {
-        post("%s in inlet %i (%i args)", s->s_name, inlet, ac);
-    }
+//    void bang(long inlet) {
+//        post("bang in inlet %i!", inlet);
+//    }
+//    void test(long inlet, t_symbol * s, long ac, t_atom * av) {
+//        post("%s in inlet %i (%i args)", s->s_name, inlet, ac);
+//    }
     
     void handleFloat(long inlet, double v) {
-        post("inlet %ld float %f", inlet, v);
-        //        outlet_float(m_outlets[0], v);
-        
+        std::string param = "";
+    
         switch (inlet) {
-            case 0:
-                metamorph.harmonic_scale(v);
-                break;
             case 1:
-                metamorph.residual_scale(v);
+                param = "Harmonic Scale: ";
+                harmonic_scale = v;
                 break;
             case 2:
-                metamorph.transient_scale(v);
+                param = "Residual Scale: ";
+                residual_scale = v;
+                break;
+            case 3:
+                param = "Transient Scale: ";
+                transient_scale = v;
             default:
                 break;
         }
         
+        post("%s %f", param.c_str(), inlet, v);
     }
+    
     
     // default signal processing method is called 'perform'
     void perform(double **ins, long numins, double **outs, long numouts, long sampleframes) {
-        // example code to invert inputs
+        double* in = ins[0];
+        double* out = outs[0];
         
-        //Just analyse mono
-        numouts = 1;
         
-        for (long channel = 0; channel < numouts; channel++) {
-            double * in = ins[channel];
-            double * out = outs[channel];
-            
-            inputRingBuffer.write(sampleframes, in);
-            
-            for(int i=0; i<sampleframes; i++)
-                out[i] = 0.0;
-            
-            if(inputRingBuffer.fillCount >= hopSize)
-            {
-                inputRingBuffer.read(hopSize, &tempInputBuffer[0]);
-                metamorph.process_frame(hopSize, &tempInputBuffer[0], hopSize, &tempOutputBuffer[0]);
-                outputRingBuffer.write(hopSize, &tempOutputBuffer[0]);
-            }
-            
-            int samplesProcessed = outputRingBuffer.read(sampleframes, out);
-        }
+        for(int i=0; i<sampleframes; i++)
+            out[i] = 0.0;
+        
+        fx->harmonic_scale(harmonic_scale);
+        fx->residual_scale(residual_scale);
+        fx->transient_scale(transient_scale);
+        
+        fx->preserve_transients(preserve_transients);
+        
+        transpose->transposition(0.0);
+        fx->preserve_envelope(preserve_envelope);
+        
+        hdist->harmonic_distortion(1.0);
+        hdist->fundamental_frequency(0.0);
+        
+        fx->process_frame(sampleframes, in, sampleframes, out);
     }
     
-    // optional method: gets called when the dsp chain is modified
-    // if not given, the MspCpp will use Example::perform by default
+    //	// optional method: gets called when the dsp chain is modified
+    //	// if not given, the MspCpp will use Metamorph::perform by default
     void dsp(t_object * dsp64, short *count, double samplerate, long maxvectorsize, long flags) {
         // specify a perform method manually:
-        setupBuffers();
+        fx->reset();
+        fx->hop_size(sys_getblksize());
+        fx->frame_size(sys_getblksize() * hops_per_frame);
         
         REGISTER_PERFORM(Metamorph, perform);
     }
@@ -171,8 +123,8 @@ public:
 C74_EXPORT int main(void) {
     // create a class with the given name:
     Metamorph::makeMaxClass("metamorph~");
-    REGISTER_METHOD(Metamorph, bang);
-    REGISTER_METHOD_GIMME(Metamorph, test);
+//    REGISTER_METHOD(Metamorph, bang);
+//    REGISTER_METHOD_GIMME(Metamorph, test);
     
     REGISTER_INLET_FLOAT(Metamorph, handleFloat);
     REGISTER_INLET_FLOAT(Metamorph, handleFloat);

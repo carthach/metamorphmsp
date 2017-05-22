@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2FBBEAD608F335360078DB84"
-               BuildableName = "example~.mxo"
+               BuildableName = "metamorph~.mxo"
                BlueprintName = "max-external"
                ReferencedContainer = "container:metamorph~.xcodeproj">
             </BuildableReference>
@@ -42,11 +42,16 @@
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES">
+      <PathRunnable
+         runnableDebuggingMode = "0"
+         BundleIdentifier = "com.cycling74.Max"
+         FilePath = "/Applications/Max_7.0.0.app">
+      </PathRunnable>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2FBBEAD608F335360078DB84"
-            BuildableName = "example~.mxo"
+            BuildableName = "metamorph~.mxo"
             BlueprintName = "max-external"
             ReferencedContainer = "container:metamorph~.xcodeproj">
          </BuildableReference>
@@ -64,7 +69,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "2FBBEAD608F335360078DB84"
-            BuildableName = "example~.mxo"
+            BuildableName = "metamorph~.mxo"
             BlueprintName = "max-external"
             ReferencedContainer = "container:metamorph~.xcodeproj">
          </BuildableReference>
