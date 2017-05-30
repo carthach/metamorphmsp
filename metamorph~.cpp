@@ -6,8 +6,69 @@
 
 using namespace metamorph;
 
+class RingBuffer {
+public:
+    std::vector<double> buffer;
+    
+    int readIndex;
+    int writeIndex;
+    int fillCount;
+    
+    RingBuffer(int size)
+    {
+        buffer.assign(size, 0.0);
+        readIndex = 0;
+        writeIndex = 0;
+        fillCount = 0;
+    }
+    
+    int write(int noOfSamples, const double* data)
+    {
+        if(fillCount >= buffer.size())
+            return 0;
+        
+        for(int i=0; i<noOfSamples; i++)
+        {
+            buffer[writeIndex] = data[i];
+            
+            if(writeIndex == buffer.size()-1)
+                writeIndex = 0;
+            else
+                writeIndex++;
+        }
+        
+        this->fillCount += noOfSamples;
+        
+        return noOfSamples;
+    }
+    
+    int read(int noOfSamples, double* data)
+    {
+        if(readIndex == writeIndex)
+            return 0;
+        
+        for(int i=0; i<noOfSamples; i++)
+        {
+            data[i] = buffer[readIndex];
+            
+            if(readIndex == buffer.size()-1)
+                readIndex = 0;
+            else
+                readIndex++;
+        }
+        
+        this->fillCount -= noOfSamples;
+        
+        return noOfSamples;
+    }
+};
+
 class Metamorph : public MspCpp6<Metamorph> {
 public:
+    RingBuffer inBuffer, outBuffer;
+    std::vector<double> inTempFrame;
+    std::vector<double> outTempFrame;
+    
     int hops_per_frame;
     FX* fx;
     Transposition* transpose;
@@ -22,16 +83,15 @@ public:
     harmonic_distortion,
     fundamental_frequency;
     
-    Metamorph(t_symbol * sym, long ac, t_atom * av) {
+    Metamorph(t_symbol * sym, long ac, t_atom * av) : inBuffer(sys_getsr()), outBuffer(sys_getsr()) {
         setupIO(4, 1);
-        
         
         hops_per_frame = 4;
         
         fx = new FX();
         
-        fx->hop_size(sys_getblksize());
-        fx->frame_size(sys_getblksize() * hops_per_frame);
+        fx->hop_size(512);
+        fx->frame_size(fx->hop_size() * hops_per_frame);
         
         transpose = new Transposition();
         fx->add_transformation(transpose);
@@ -41,6 +101,9 @@ public:
         
         preserve_transients = true;
         preserve_envelope = false;
+        
+        inTempFrame.assign(512, 0.0);
+        outTempFrame.assign(512, 0.0);
         
         post("object created");
     }
@@ -89,23 +152,33 @@ public:
         double* in = ins[0];
         double* out = outs[0];
         
+        memset(out, 0, sizeof(double) * sampleframes);
         
-        for(int i=0; i<sampleframes; i++)
-            out[i] = 0.0;
+        inBuffer.write(sampleframes, in);
         
-        fx->harmonic_scale(harmonic_scale);
-        fx->residual_scale(residual_scale);
-        fx->transient_scale(transient_scale);
+        if(inBuffer.fillCount >= fx->hop_size())
+        {
+            fill(inTempFrame.begin(), inTempFrame.end(), 0.0);
+            fill(outTempFrame.begin(), outTempFrame.end(), 0.0);
         
-        fx->preserve_transients(preserve_transients);
+            fx->harmonic_scale(harmonic_scale);
+            fx->residual_scale(residual_scale);
+            fx->transient_scale(transient_scale);
+            
+            fx->preserve_transients(preserve_transients);
+            
+            transpose->transposition(0.0);
+            fx->preserve_envelope(preserve_envelope);
+            
+            hdist->harmonic_distortion(1.0);
+            hdist->fundamental_frequency(0.0);
         
-        transpose->transposition(0.0);
-        fx->preserve_envelope(preserve_envelope);
+            inBuffer.read(fx->hop_size(), &inTempFrame[0]);
+            fx->process_frame(fx->hop_size(), &inTempFrame[0], fx->hop_size(), &outTempFrame[0]);
+            outBuffer.write(fx->hop_size(), &outTempFrame[0]);
+        }
         
-        hdist->harmonic_distortion(1.0);
-        hdist->fundamental_frequency(0.0);
-        
-        fx->process_frame(sampleframes, in, sampleframes, out);
+        outBuffer.read(sampleframes, out);
     }
     
     //	// optional method: gets called when the dsp chain is modified
@@ -113,8 +186,9 @@ public:
     void dsp(t_object * dsp64, short *count, double samplerate, long maxvectorsize, long flags) {
         // specify a perform method manually:
         fx->reset();
-        fx->hop_size(sys_getblksize());
-        fx->frame_size(sys_getblksize() * hops_per_frame);
+        
+//        fx->hop_size(512);
+//        fx->frame_size(fx->hop_size() * hops_per_frame);
         
         REGISTER_PERFORM(Metamorph, perform);
     }
