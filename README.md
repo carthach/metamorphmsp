@@ -7,5 +7,3 @@ Implements a real-time Max/MSP external extending the sinusoid + noise + transie
 MetaMorph library, using the maxcpp Max C++ template. Make sure you have the MetaMorph library installed (not an easy task!).
 
 https://github.com/johnglover/metamorph
-
-For best results choose a buffer size (signal vector size in Max), of 512. In future will fix this with a RingBuffer that can cope with default and changing vector sizes.
